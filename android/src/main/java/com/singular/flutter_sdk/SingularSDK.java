@@ -168,11 +168,11 @@ public class SingularSDK implements FlutterPlugin, ActivityAware, MethodCallHand
 
   @Override
   public void onDetachedFromEngine(@NonNull FlutterPluginBinding binding) {
-    if (channel != null) {
-      channel.setMethodCallHandler(null);
-      channel = null;
-    }
-    mContext = null;
+    // if (channel != null) {
+    //   channel.setMethodCallHandler(null);
+    //   channel = null;
+    // }
+    // mContext = null;
   }
 
   void initSDK() {
