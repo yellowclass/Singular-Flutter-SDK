@@ -8,7 +8,7 @@ import 'package:singular_flutter_sdk/singular_iap.dart';
 
 const ADMON_REVENUE_EVENT_NAME = '__ADMON_USER_LEVEL_REVENUE__';
 const _SDK_NAME = 'Flutter';
-const _SDK_VERSION = '1.4.1';
+const _SDK_VERSION = '1.9.0';
 
 typedef void ShortLinkCallback(String? data, String? error);
 
@@ -183,7 +183,7 @@ class Singular {
   static Future<num> skanGetConversionValue() async {
     if (Platform.isIOS) {
       final num conversionValue =
-      await _channel.invokeMethod('skanUpdateConversionValue');
+      await _channel.invokeMethod('skanGetConversionValue');
       return conversionValue;
     }
 
@@ -211,8 +211,6 @@ class Singular {
     _channel.invokeMethod('eventWithArgs',
         {'eventName': ADMON_REVENUE_EVENT_NAME, 'args': adData});
   }
-
-
   
   static void createReferrerShortLink(String baseLink,
                                         String referrerName,
@@ -230,4 +228,21 @@ class Singular {
 
     singularConfig?.setShortLinkCallback(shortLinkCallback);
   }
+
+  static void handlePushNotification(Map pushNotificationPayload) {
+    if (Platform.isIOS) {
+      _channel.invokeMethod('handlePushNotification',
+          {
+            'pushNotificationPayload': pushNotificationPayload
+          });
+    }
+  }
+
+  static void setLimitAdvertisingIdentifiers(bool enabled) {
+    _channel.invokeMethod('setLimitAdvertisingIdentifiers',
+        {
+          'limitAdvertisingIdentifiers': enabled
+        });
+  }
+
 }

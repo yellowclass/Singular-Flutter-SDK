@@ -10,6 +10,7 @@ public class SingularConstants {
     final static String REGISTER_DEVICE_TOKEN_FOR_UNINSTALL = "registerDeviceTokenForUninstall";
     final static String CUSTOM_REVENUE = "customRevenue";
     final static String CUSTOM_REVENUE_WITH_ATTRIBUTES = "customRevenueWithAttributes";
+    final static String CUSTOM_REVENUE_WITH_ALL_ATTRIBUTES = "customRevenueWithAllAttributes";
     final static String SET_WRAPPER_NAME_AND_VERSION = "setWrapperNameAndVersion";
     final static String GET_GLOBAL_PROPERTIES = "getGlobalProperties";
     final static String SET_GLOBAL_PROPERTY = "setGlobalProperty";
@@ -24,5 +25,6 @@ public class SingularConstants {
     final static String GET_LIMIT_DATA_SHARING = "getLimitDataSharing";
     final static String SET_FCM_TOKEN = "setFCMDeviceToken";
     final static String CREATE_REFERRER_SHORT_LINK = "createReferrerShortLink";
+    final static String SET_LIMIT_ADVERTISING_IDENTIFIERS = "setLimitAdvertisingIdentifiers";
 }
 

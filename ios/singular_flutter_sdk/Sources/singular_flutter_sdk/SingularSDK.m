@@ -111,6 +111,12 @@ static NSDictionary *configDict;
     config.limitAdvertisingIdentifiers = limitAdvertisingIdentifiers;
     config.enableOdmWithTimeoutInterval = [configDict[@"enableOdmWithTimeoutInterval"] intValue];
 
+    config.enableLogging = [configDict[@"enableLogging"] boolValue];
+    NSNumber *logLevel = configDict[@"logLevel"];
+    if (logLevel != nil && ![logLevel isEqual:[NSNull null]] && [logLevel integerValue] >= 0) {
+        config.logLevel = (SingularLogLevel)[logLevel integerValue];
+    }
+
     NSArray *props = configDict[@"globalProperties"];
 
     if (props != nil) {
@@ -128,7 +134,7 @@ static NSDictionary *configDict;
 
     NSNumber *limitDataSharing = configDict[@"limitDataSharing"];
 
-    if (![limitDataSharing isEqual:[NSNull null]]) {
+    if (limitDataSharing != nil && ![limitDataSharing isEqual:[NSNull null]]) {
         [Singular limitDataSharing:[limitDataSharing boolValue]];
     }
 
@@ -150,15 +156,32 @@ static NSDictionary *configDict;
         });
     };
     
-    if ([SingularAppDelegate shared].launchOptions != nil) {
-        config.launchOptions = [SingularAppDelegate shared].launchOptions;
-    } else if ([SingularAppDelegate shared].userActivity != nil) {
-        config.userActivity = [SingularAppDelegate shared].userActivity;
-    } else if ([SingularAppDelegate shared].openURL != nil) {
-        config.openUrl = [SingularAppDelegate shared].openURL;
-    } else {
-        NSLog(@"everything is null");
+    SingularAppDelegate *singularAppDelegate = [SingularAppDelegate shared];
+
+    // Under the scene lifecycle these arrive from different callbacks and can be set
+    // at the same time: launchOptions from application:didFinishLaunchingWithOptions:,
+    // userActivity/openURL from scene:willConnectToSession:options:.
+    // This was safe pre-scenes only because launchOptions itself contained the user
+    // activity.
+    if (singularAppDelegate.launchOptions != nil) {
+        config.launchOptions = singularAppDelegate.launchOptions;
     }
+    if (singularAppDelegate.userActivity != nil) {
+        config.userActivity = singularAppDelegate.userActivity;
+    }
+    if (singularAppDelegate.openURL != nil) {
+        config.openUrl = singularAppDelegate.openURL;
+    }
+
+    if (singularAppDelegate.launchOptions == nil &&
+        singularAppDelegate.userActivity == nil &&
+        singularAppDelegate.openURL == nil) {
+        NSLog(@"[SingularSDK][INFO] everything is null");
+    }
+
+    singularAppDelegate.launchOptions = nil;
+    singularAppDelegate.userActivity = nil;
+    singularAppDelegate.openURL = nil;
 
     config.deviceAttributionCallback = ^(NSDictionary *attributionInfo) {
         NSString *attributionData = [self dictionaryToJson:attributionInfo];
