@@ -192,6 +192,22 @@ public class SingularSDK implements FlutterPlugin, ActivityAware, MethodCallHand
 
   @Override
   public void onDetachedFromEngine(@NonNull FlutterPluginBinding binding) {
+    // SpeakX fork patch — do NOT restore upstream's teardown without testing.
+    //
+    // mContext is a *static* field, shared by every FlutterEngine in the
+    // process. The app's FCM background handler
+    // (push_notification_manager.dart::firebaseMessagingBackgroundHandler) is a
+    // vm:entry-point isolate that spins up a second engine and inits Singular
+    // inside it for AD_CAMPAIGN_EVENT pushes. When that short-lived engine
+    // detaches, upstream's `mContext = null` wipes the context out from under
+    // the still-running main engine, silently breaking Singular attribution and
+    // event delivery for the rest of the session.
+    //
+    // `channel` is an instance field, so clearing it would be safe on its own;
+    // only the static mContext is the cross-engine hazard. Both are left
+    // disabled here to match the behaviour that has been in production since
+    // Oct 2024.
+    //
     // if (channel != null) {
     //   channel.setMethodCallHandler(null);
     //   channel = null;
