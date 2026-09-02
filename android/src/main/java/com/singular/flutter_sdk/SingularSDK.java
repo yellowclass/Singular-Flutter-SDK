@@ -46,17 +46,33 @@ public class SingularSDK implements FlutterPlugin, ActivityAware, MethodCallHand
   private static SingularLinkHandler singularLinkHandler;
   private static SingularConfig singularConfig;
 
+  private static String[][] pushNotificationsLinkPaths;
+
+  private static Intent pendingIntent;
+
   public static void onNewIntent(Intent intent) {
-
-    // We save the intent hash code to make sure that the intent we get is a new one to avoid resolving an old deeplink.
-    if (singularConfig != null &&
-            singularLinkHandler != null && intent != null && intent.hashCode() != currentIntentHash && intent.getData() != null &&
-            Intent.ACTION_VIEW.equals(intent.getAction())) {
-      currentIntentHash = intent.hashCode();
-
-      singularConfig.withSingularLink(intent, singularLinkHandler);
-      Singular.init(mContext, singularConfig);
+    if (intent == null || intent.hashCode() == currentIntentHash) {
+      return;
     }
+
+    if (singularConfig == null) {
+      pendingIntent = intent;
+      return;
+    }
+
+    // We save the intent hash code to make sure that the intent we get is a new one to avoid resolving an old push/deeplink.
+    currentIntentHash = intent.hashCode();
+
+    if (intent.getExtras() != null && intent.getExtras().size() > 0
+            && pushNotificationsLinkPaths != null && pushNotificationsLinkPaths.length > 0) {
+        singularConfig.withPushNotificationPayload(intent, pushNotificationsLinkPaths);
+    }
+
+    if (singularLinkHandler != null && intent.getData() != null && Intent.ACTION_VIEW.equals(intent.getAction())) {
+      singularConfig.withSingularLink(intent, singularLinkHandler);
+    }
+
+    Singular.init(mContext, singularConfig);
   }
 
   // Notify the plugin that it has been attached to an engine.
@@ -81,6 +97,8 @@ public class SingularSDK implements FlutterPlugin, ActivityAware, MethodCallHand
   @Override
   public void onReattachedToActivityForConfigChanges(
           ActivityPluginBinding binding) {
+   // to make sure that we always have latest intent
+    mIntent = binding.getActivity().getIntent();
   }
 
   @Override
@@ -114,6 +132,9 @@ public class SingularSDK implements FlutterPlugin, ActivityAware, MethodCallHand
         break;
       case SingularConstants.CUSTOM_REVENUE_WITH_ATTRIBUTES:
         customRevenueWithArgs(call, result);
+        break;
+      case SingularConstants.CUSTOM_REVENUE_WITH_ALL_ATTRIBUTES:
+        customRevenueWithAllAttributes(call, result);
         break;
       case SingularConstants.TRACKING_OPT_IN:
         trackingOptIn(call, result);
@@ -160,6 +181,9 @@ public class SingularSDK implements FlutterPlugin, ActivityAware, MethodCallHand
       case SingularConstants.CREATE_REFERRER_SHORT_LINK:
         createReferrerShortLink(call, result);
         break;
+      case SingularConstants.SET_LIMIT_ADVERTISING_IDENTIFIERS:
+        setLimitAdvertisingIdentifiers(call, result);
+        break;
       default:
         result.notImplemented();
         break;
@@ -168,6 +192,22 @@ public class SingularSDK implements FlutterPlugin, ActivityAware, MethodCallHand
 
   @Override
   public void onDetachedFromEngine(@NonNull FlutterPluginBinding binding) {
+    // SpeakX fork patch — do NOT restore upstream's teardown without testing.
+    //
+    // mContext is a *static* field, shared by every FlutterEngine in the
+    // process. The app's FCM background handler
+    // (push_notification_manager.dart::firebaseMessagingBackgroundHandler) is a
+    // vm:entry-point isolate that spins up a second engine and inits Singular
+    // inside it for AD_CAMPAIGN_EVENT pushes. When that short-lived engine
+    // detaches, upstream's `mContext = null` wipes the context out from under
+    // the still-running main engine, silently breaking Singular attribution and
+    // event delivery for the rest of the session.
+    //
+    // `channel` is an instance field, so clearing it would be safe on its own;
+    // only the static mContext is the cross-engine hazard. Both are left
+    // disabled here to match the behaviour that has been in production since
+    // Oct 2024.
+    //
     // if (channel != null) {
     //   channel.setMethodCallHandler(null);
     //   channel = null;
@@ -184,6 +224,7 @@ public class SingularSDK implements FlutterPlugin, ActivityAware, MethodCallHand
     String secretKey = (String) configDict.get("secretKey");
     boolean collectOAID = (boolean) configDict.get("collectOAID");
     boolean enableLogging = (boolean) configDict.get("enableLogging");
+    boolean limitAdvertisingIdentifiers = (boolean) configDict.get("limitAdvertisingIdentifiers");
 
     double shortLinkResolveTimeOut = (double) configDict.get("shortLinkResolveTimeOut");
 
@@ -199,6 +240,10 @@ public class SingularSDK implements FlutterPlugin, ActivityAware, MethodCallHand
     }
     if (enableLogging) {
       singularConfig.withLoggingEnabled();
+    }
+
+    if (limitAdvertisingIdentifiers) {
+      singularConfig.withLimitAdvertisingIdentifiers();
     }
 
     try {
@@ -233,6 +278,13 @@ public class SingularSDK implements FlutterPlugin, ActivityAware, MethodCallHand
       List<String> espDomains = (ArrayList<String>) configDict.get("espDomains");
       if (espDomains != null && espDomains.size() > 0) {
         singularConfig.withESPDomains(espDomains);
+      }
+    } catch (Throwable t) { /* intentionally unhandled */ }
+
+    try {
+      List<String> brandedDomains = (ArrayList<String>) configDict.get("brandedDomains");
+      if (brandedDomains != null && brandedDomains.size() > 0) {
+        singularConfig.withBrandedDomains(brandedDomains);
       }
     } catch (Throwable t) { /* intentionally unhandled */ }
 
@@ -281,13 +333,28 @@ public class SingularSDK implements FlutterPlugin, ActivityAware, MethodCallHand
       }
     };
 
-    if (mIntent != null) {
-      int intentHash = mIntent.hashCode();
+    List<List<String>> pushPath = (List<List<String>>) configDict.get("pushNotificationsLinkPaths");
+    pushNotificationsLinkPaths = convertTo2DArray(pushPath);
+
+    // A deep link that arrived before init was parked in pendingIntent by onNewIntent. It is always
+    // newer than mIntent (captured once when the plugin attached to the Activity), so it wins.
+    // We clear it right after picking it up so a later init won't resolve the same stale intent again.
+    Intent intentToResolve = pendingIntent != null ? pendingIntent : mIntent;
+    pendingIntent = null;
+
+    if (intentToResolve != null) {
+      int intentHash = intentToResolve.hashCode();
       if (intentHash != currentIntentHash) {
         currentIntentHash = intentHash;
-        singularConfig.withSingularLink(mIntent, singularLinkHandler,(long) shortLinkResolveTimeOut);
+
+        if (intentToResolve.getExtras() != null && intentToResolve.getExtras().size() > 0
+                && pushNotificationsLinkPaths != null && pushNotificationsLinkPaths.length > 0) {
+            singularConfig.withPushNotificationPayload(intentToResolve, pushNotificationsLinkPaths);
+        }
       }
     }
+
+    singularConfig.withSingularLink(intentToResolve, singularLinkHandler, (long) shortLinkResolveTimeOut);
     singularConfig.withSingularDeviceAttribution(new SingularDeviceAttributionHandler() {
       @Override
       public void onDeviceAttributionInfoReceived(Map<String, Object> deviceAttributionData) {
@@ -384,6 +451,19 @@ public class SingularSDK implements FlutterPlugin, ActivityAware, MethodCallHand
     Singular.customRevenue(eventName, currency, amount, args);
   }
 
+  private void customRevenueWithAllAttributes(final MethodCall call, final Result result) {
+    String eventName = call.argument("eventName");
+    String currency = call.argument("currency");
+    double amount = call.argument("amount");
+    String productSKU = call.argument("productSKU");
+    String productName = call.argument("productName");
+    String productCategory = call.argument("productCategory");
+    int productQuantity = call.argument("productQuantity");
+    double productPrice = call.argument("productPrice");
+
+    Singular.customRevenue(eventName, currency, amount, productSKU, productName, productCategory, productQuantity, productPrice);
+  }
+
   private void trackingOptIn(final MethodCall call, final Result result) {
     Singular.trackingOptIn();
   }
@@ -450,6 +530,11 @@ public class SingularSDK implements FlutterPlugin, ActivityAware, MethodCallHand
     Singular.setWrapperNameAndVersion(name, version);
   }
 
+  private void setLimitAdvertisingIdentifiers(final MethodCall call, final Result result) {
+    boolean limitAdvertisingIdentifiers = call.argument("limitAdvertisingIdentifiers");
+    Singular.setLimitAdvertisingIdentifiers(limitAdvertisingIdentifiers);
+  }
+
   private void createReferrerShortLink(final MethodCall call, final Result result) {
     String baseLink = call.argument("baseLink");
     String referrerName = call.argument("referrerName");
@@ -493,4 +578,20 @@ public class SingularSDK implements FlutterPlugin, ActivityAware, MethodCallHand
               }
             });
   }
+
+  static String[][] convertTo2DArray(List<List<String>> listOfLists) {
+    if (listOfLists == null || listOfLists.isEmpty()) {
+      return null;
+    }
+
+    String[][] array = new String[listOfLists.size()][];
+
+    for (int i = 0; i < listOfLists.size(); i++) {
+      List<String> list = listOfLists.get(i);
+      array[i] = list.toArray(new String[0]);
+    }
+
+    return array;
+  }
+
 }

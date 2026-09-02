@@ -1,3 +1,34 @@
+## 1.9.0
+- Added support for Swift package manager
+- Updates underlying native iOS SDK to 12.13.0 and Android to 12.16.0
+
+## 1.8.0
+- Added support for upcoming Google Ads on Device Measurement
+- Updates underlying native iOS SDK to 12.8.1 and Android to 12.9.1
+
+## 1.7.0
+- limit advertising identifiers support
+- branded domains support
+- Updates underlying native iOS SDK to 12.8.0 and Android to 12.9.0
+
+## 1.6.2
+- Improved SDID handling
+- Updates underlying android SDK to 12.7.2
+
+## 1.6.1
+- fix for Android push notification support
+
+## 1.6.0
+- Push notifications support
+- Limited identifiers support
+- Updates underlying native iOS SDK to 12.7.1 and Android to 12.7.0
+
+## 1.5.1
+- podspec changed to static framework
+
+## 1.5.0
+- Updates underlying native iOS SDK to 12.6.0 and Android to 12.6.0
+
 ## 1.4.1
 - Support for AGP 8 and above 
 - Updates underlying native iOS SDK to 12.4.4 and Android to 12.5.6
